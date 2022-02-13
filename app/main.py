@@ -44,7 +44,12 @@ def save_company_info(data):
 
 @app.get("/api/company/<string:id>")
 def get_company_info(id):
-	response = requests.get("https://avoindata.prh.fi/bis/v1/" + id)
+	try:
+		response = requests.get("https://avoindata.prh.fi/bis/v1/" + id)
+		response.raise_for_status()
+	except requests.exceptions.HTTPError as error:
+		return str(error), response.status_code
+		
 	result = response.json()['results'][0]
 
 	data = {
@@ -66,7 +71,10 @@ def get_company_info(id):
 		if contactdetail['endDate'] is None and "www" in contactdetail['type'].lower() and contactdetail['value'] != "":
 			data['website'] = (contactdetail['value'], contactdetail['registrationDate'])
 
-	save_company_info(data)
+	try:
+		save_company_info(data)
+	except sqlite3.Error as error:
+		print(error)
 
 	# omit registration dates from resulting json
 	data['address'] = data['address'][0]
@@ -77,10 +85,15 @@ def get_company_info(id):
 
 @app.get("/api/company/list")
 def company_info_list():
-	conn = get_db(database)
-	cur = conn.cursor()
-
-	companies = cur.execute("SELECT * FROM companies").fetchall()
+	companies = {}
+	
+	try:
+		conn = get_db(database)
+		cur = conn.cursor()
+		companies = cur.execute("SELECT * FROM companies").fetchall()
+	except sqlite3.Error as error:
+		return str(error), 404
+		
 	conn.close()
 
 	return jsonify(companies)
