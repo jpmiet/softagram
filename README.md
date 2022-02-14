@@ -2,8 +2,6 @@
 ### Usage
 In Linux/macOS:
 ```sh
-chmod +x start.sh
-```
-```sh
-sh start.sh
+$ chmod +x start.sh
+$ sh start.sh
 ```
