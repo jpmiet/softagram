@@ -42,58 +42,88 @@ def save_company_info(data):
 		conn.commit()
 		conn.close()
 
+def valid_businessid(id):
+	if len(id) == 9 and id[7] == "-":
+		multipliers = [7, 9, 10, 5, 8, 4, 2]
+		calculation = 0
+		try:
+			id_checksum = int(id[8])
+			idx = 0
+			for multiplier in multipliers:
+				calculation += int(id[idx]) * multiplier
+				idx += 1
+		except ValueError:
+			return False
+
+		modulo = calculation % 11
+
+		if modulo == 1:
+			return False
+		elif modulo == 0 and id_checksum == 0:
+			return True
+		elif 11 - modulo == id_checksum:
+			return True
+		else:
+			return False
+	else:
+		return False
+
 @app.get("/api/company/<string:id>")
 def get_company_info(id):
-	try:
-		response = requests.get("https://avoindata.prh.fi/bis/v1/" + id)
-		response.raise_for_status()
-	except requests.exceptions.HTTPError as error:
-		return str(error), response.status_code
-		
-	result = response.json()['results'][0]
+	if valid_businessid(id):
+		try:
+			response = requests.get("https://avoindata.prh.fi/bis/v1/" + id)
+			response.raise_for_status()
+		except requests.exceptions.HTTPError as error:
+			return str(error), response.status_code
 
-	data = {
-		"business_id": result['businessId'],
-		"name": result['name'],
-		"address": ("", ""),
-		"phone": ("", ""),
-		"website": ("", "")
-	}
+		result = response.json()['results'][0]
 
-	# parse valid contact info with registration date(s)
-	for address in result['addresses']:
-		if address['endDate'] is None and address['street'] != "":
-			data['address'] = (address['street'] + ", " + address['postCode'] + " " + address['city'], address['registrationDate'])
+		data = {
+			"business_id": result['businessId'],
+			"name": result['name'],
+			"address": ("", ""),
+			"phone": ("", ""),
+			"website": ("", "")
+		}
 
-	for contactdetail in result['contactDetails']:
-		if contactdetail['endDate'] is None and "puhelin" in contactdetail['type'].lower() and contactdetail['value'] != "":
-			data['phone'] = (contactdetail['value'], contactdetail['registrationDate'])
-		if contactdetail['endDate'] is None and "www" in contactdetail['type'].lower() and contactdetail['value'] != "":
-			data['website'] = (contactdetail['value'], contactdetail['registrationDate'])
+		# parse valid contact info with registration date(s)
+		for address in result['addresses']:
+			if address['endDate'] is None and address['street'] != "":
+				data['address'] = (address['street'] + ", " + address['postCode'] + " " + address['city'], address['registrationDate'])
 
-	try:
-		save_company_info(data)
-	except sqlite3.Error as error:
-		print(error)
+		for contactdetail in result['contactDetails']:
+			if contactdetail['endDate'] is None and "puhelin" in contactdetail['type'].lower() and contactdetail['value'] != "":
+				data['phone'] = (contactdetail['value'], contactdetail['registrationDate'])
+			if contactdetail['endDate'] is None and "www" in contactdetail['type'].lower() and contactdetail['value'] != "":
+				data['website'] = (contactdetail['value'], contactdetail['registrationDate'])
 
-	# omit registration dates from resulting json
-	data['address'] = data['address'][0]
-	data['phone'] = data['phone'][0]
-	data['website'] = data['website'][0]
+		try:
+			save_company_info(data)
+		except sqlite3.Error as error:
+			print(error)
 
-	return jsonify(data)
+		# omit registration dates from resulting json
+		data['address'] = data['address'][0]
+		data['phone'] = data['phone'][0]
+		data['website'] = data['website'][0]
+
+		return jsonify(data)
+
+	else:
+		return "Invalid business ID", 400
 
 @app.get("/api/company/list")
 def company_info_list():
 	companies = {}
-	
+
 	try:
 		conn = get_db(database)
 		cur = conn.cursor()
 		companies = cur.execute("SELECT * FROM companies").fetchall()
 	except sqlite3.Error as error:
 		return str(error), 404
-		
+
 	conn.close()
 
 	return jsonify(companies)
