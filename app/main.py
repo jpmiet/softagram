@@ -48,10 +48,8 @@ def valid_businessid(id):
 		calculation = 0
 		try:
 			id_checksum = int(id[8])
-			idx = 0
-			for multiplier in multipliers:
+			for idx, multiplier in enumerate(multipliers):
 				calculation += int(id[idx]) * multiplier
-				idx += 1
 		except ValueError:
 			return False
 
